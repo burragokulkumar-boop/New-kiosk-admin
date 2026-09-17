@@ -1,0 +1,90 @@
+name: Build InfinityMetaKiosk APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.7'
+
+      - name: Create Android project structure
+        shell: bash
+        run: |
+          set -e
+
+          mkdir -p build_project/app/src/main/java
+          mkdir -p build_project/app/src/main/res/values
+          mkdir -p build_project/app/src/main/res/xml
+          mkdir -p build_project/app/src/main/res/drawable
+
+          PACKAGE=$(grep -m1 '^package ' MainActivity.java | sed 's/package //;s/;//')
+
+          if [ -z "$PACKAGE" ]; then
+            echo "ERROR: Could not find Java package in MainActivity.java"
+            exit 1
+          fi
+
+          echo "Detected package: $PACKAGE"
+
+          PACKAGE_PATH=$(echo "$PACKAGE" | tr '.' '/')
+          mkdir -p "build_project/app/src/main/java/$PACKAGE_PATH"
+
+          for FILE in MainActivity.java \
+                      KioskDeviceAdminReceiver.java \
+                      ManagementConfig.java \
+                      ManagementClient.java \
+                      ManagementCommandService.java; do
+            if [ -f "$FILE" ]; then
+              cp "$FILE" "build_project/app/src/main/java/$PACKAGE_PATH/"
+            fi
+          done
+
+          cp AndroidManifest.xml \
+            build_project/app/src/main/AndroidManifest.xml
+
+          for FILE in colors.xml strings.xml themes.xml; do
+            if [ -f "$FILE" ]; then
+              cp "$FILE" \
+                "build_project/app/src/main/res/values/$FILE"
+            fi
+          done
+
+          if [ -f device_admin_receiver.xml ]; then
+            cp device_admin_receiver.xml \
+              build_project/app/src/main/res/xml/device_admin_receiver.xml
+          fi
+
+          if [ -f infinity_wallpaper.jpg ]; then
+            cp infinity_wallpaper.jpg \
+              build_project/app/src/main/res/drawable/infinity_wallpaper.jpg
+          fi
+
+          if [ -f infinity_meta_icon.png ]; then
+            cp infinity_meta_icon.png \
+              build_project/app/src/main/res/drawable/infinity_meta_icon.png
+          else
+            echo "ERROR: infinity_meta_icon.png was not found."
+            exit 1
+          fi
+
+          cat > build_project/settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
